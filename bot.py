@@ -1,3 +1,4 @@
+import os
 import asyncio
 import html
 import logging
@@ -5,6 +6,7 @@ from typing import Optional
 
 import aiosqlite
 from aiogram import Bot, Dispatcher, F
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, BotCommand
@@ -12,12 +14,18 @@ from aiogram.types import Message, BotCommand
 # =========================
 # НАСТРОЙКИ
 # =========================
-BOT_TOKEN = "8781486353:AAGroUxkLv97qMH1TEOrzv4Zgm5FdnXcq6k"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN environment variable is not set")
+
 DB_PATH = "users.db"
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 dp = Dispatcher()
 
 
@@ -42,9 +50,14 @@ async def init_db():
         await db.commit()
 
 
-async def save_user(chat_id: int, user_id: int, username: Optional[str],
-                    first_name: Optional[str], last_name: Optional[str],
-                    is_bot: bool):
+async def save_user(
+    chat_id: int,
+    user_id: int,
+    username: Optional[str],
+    first_name: Optional[str],
+    last_name: Optional[str],
+    is_bot: bool
+):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT INTO users (
@@ -80,7 +93,11 @@ async def get_users(chat_id: int):
         return rows
 
 
-def user_display_name(username: Optional[str], first_name: Optional[str], last_name: Optional[str]) -> str:
+def user_display_name(
+    username: Optional[str],
+    first_name: Optional[str],
+    last_name: Optional[str]
+) -> str:
     full_name = " ".join(x for x in [first_name, last_name] if x)
     if full_name.strip():
         return full_name.strip()
@@ -103,7 +120,6 @@ def chunk_text(text: str, limit: int = 4000):
             if len(line) <= limit:
                 current = line
             else:
-                # Если строка сама очень длинная — режем
                 for i in range(0, len(line), limit):
                     parts.append(line[i:i + limit])
                 current = ""
@@ -188,7 +204,6 @@ async def on_new_chat_members(message: Message):
 
 @dp.message()
 async def on_any_message(message: Message):
-    # Сохраняем автора любого сообщения
     if message.chat.type in ("group", "supergroup") and message.from_user:
         await save_user(
             chat_id=message.chat.id,
@@ -199,7 +214,6 @@ async def on_any_message(message: Message):
             is_bot=message.from_user.is_bot
         )
 
-    # Реакция на ровно одно слово "ясно"
     if message.text:
         text = message.text.strip().lower()
         if text == "ясно":
